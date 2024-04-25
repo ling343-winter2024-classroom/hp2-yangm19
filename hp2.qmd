@@ -1,0 +1,261 @@
+---
+title: "hp2"
+author: "Molly Yang"
+format: 
+  html:
+    embed-resources: true
+editor_options: 
+  chunk_output_type: console
+project:
+  type: website
+  output-dir: docs
+---
+
+## Introduction
+Popular music can provide insights into cultural evolutionary dynamics over time. A noticeable change has been in the content of the lyrics of popular songs. It seems to be the trend that lyrics with more negative content are on the rise, though it also seems to be the case that lyrics are more openly expressing love than before. Using sentiment analysis, I will examine lyrics of the top songs in the US from 1950 to 2019 to determine if there has been an increase in negative lyrics in songs or if it is merely that there is a more diverse range of emotional expression. I will also determine if there is a content bias i.e. songs with negative lyrics do better in song charts, or if there has been no change/the opposite over time. 
+
+## Importing data
+The data used in this report is of the top 10 songs in the U.S. from 1950-2019 found on [Kaggle](https://www.kaggle.com/datasets/stefancomanita/top-us-songs-from-1950-to-2019-w-lyrics).
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+#| warning: false
+library(tidyverse)
+
+here::i_am("hp2-yangm19/hp2.qmd")
+library(here)
+
+top_songs <- read.csv(here("hp2-yangm19/topSongsLyrics1950_2019.csv"))
+
+```
+
+## Data dictionary
+year
+: The year the song was included in the chart
+
+rank
+: The rank the song was given in the chart (1-10)
+
+artist
+: The name of the artist(s) performing the song
+
+song
+: The title of the song
+
+lyrics
+: The lyrics of the song
+
+## Sentiment analysis
+Sentiment is about whether text is positive or negative, while emotion looks at the emotions in text (e.g. sad, happy). To perform a sentiment analysis on the top songs, I will be using the "bing" option of the get_sentiments function, which assigns a sentiment to each word. I will then look at the proportion of negative to positive sentiment words in the lyrics.
+
+## Tidying data
+First I will tidy the data imported from Kaggle by removing stop words and words that have no sentiment. These are words such as ‘ah’ and ‘yeah’ that provide no insight in the analysis. Additionally, I decided to remove the word 'woo' since although it could be the positive sentiment verb as in 'to woo someone', I think it is more likely in this context that it is an interjection like 'woo-hoo'. 
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+#| warning: false
+library(tidytext)
+library(stopwords)
+
+# trick learned from the internet because the output was gigantic and slowing down html rendering
+invisible({
+  songs_tidy <- top_songs |> 
+    unnest_tokens(word, lyrics)
+})
+
+# remove stop words and words without sentiment
+songs_tidy <- songs_tidy |> 
+  anti_join(stop_words) |> 
+  inner_join(get_sentiments("bing")) 
+
+add_stop_word <- bind_rows(stop_words, tibble(word = "woo"))
+
+# Filter data to remove rows containing the word "woo"
+songs_tidy <- songs_tidy |> 
+  anti_join(add_stop_word, by = "word")
+
+library(kableExtra)
+# proportion of sentiments
+songs_sent <- songs_tidy |> 
+  count(sentiment)
+
+sent_table <- songs_sent |> 
+  kbl() |> 
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+
+sent_table
+```
+
+There seems to be a pretty even divide between positive and negative words when looking at all the songs from 1950 to 2019. To see the frequency of sentiment words in lyrics over time, it is more helpful to visualize through graphing. 
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+#| warning: false
+
+
+# Count positive and negative sentiment words by year
+sentiment_counts <- songs_tidy |> 
+  count(year, sentiment) |> 
+  spread(sentiment, n, fill = 0)
+
+# Plotting
+ggplot(sentiment_counts, aes(x = year)) +
+  geom_line(aes(y = positive, color = "Positive")) +
+  geom_line(aes(y = negative, color = "Negative")) +
+  labs(title = "Frequency of Positive and Negative Sentiment Words in Songs Over Time",
+       x = "Year",
+       y = "Word Frequency") +
+  scale_color_manual(values = c("Positive" = "blue", "Negative" = "red")) +
+  theme_minimal()
+```
+Judging by the graph, the rise and fall of positve/negative sentiment word usage is roughly the same across time. An interesting observation is that in the 1960s there was a giant spike in the use of negative sentiment words in song lyrics. Based on US history, maybe this has something to do with the  events that were all happening during that time period (e.g. the civil rights movement, the Vietnam War and antiwar protests, countercultural movements, political assassinations etc.).
+
+## Looking at popular words
+I would also like to see what happens when I divide the songs into two periods: 1950-1980 is period 1, and 1981-2019 is period 2. What are the most popular words?
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+#| warning: false
+
+
+# Divide data into two periods
+period1 <- filter(songs_tidy, year >= 1950 & year <= 1980)
+period2 <- filter(songs_tidy, year >= 1981 & year <= 2019)
+
+# Get the most frequently used words for each period
+top_words_period1 <- period1 |> 
+  count(word, sort = TRUE) |> 
+  slice_max(n = 10, order_by = n)
+
+top_words_period2 <- period2 |> 
+  count(word, sort = TRUE) |> 
+  slice_max(n = 10, order_by = n)
+
+# Plot
+ggplot(top_words_period1, aes(x = reorder(word, n), y = n)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(title = "Top 10 Most Frequently Used Words in Songs (1950-1980)",
+       x = "Word",
+       y = "Frequency") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  coord_flip()
+
+ggplot(top_words_period2, aes(x = reorder(word, n), y = n)) +
+  geom_bar(stat = "identity", fill = "lightgreen") +
+  labs(title = "Top 10 Most Frequently Used Words in Songs (1981-2019)",
+       x = "Word",
+       y = "Frequency") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  coord_flip()
+```
+Interestingly, for both periods 'love' is by far the most commonly used word. However, there does seem to be a slight difference in the rankings following that. Negative words seem to occupy more of the higher rankings than positive ones for period 2. Additionally, swear words became much more frequent in lyrics for period 2.
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+#| warning: false
+
+# Get the most frequently used words for each period and sentiment
+top_sent_period1 <- period1 |> 
+  group_by(sentiment) |> 
+  count(word, sort = TRUE) |> 
+  slice_max(n = 10, order_by = n)
+
+top_sent_period2 <- period2 |> 
+  group_by(sentiment) |> 
+  count(word, sort = TRUE) |> 
+  slice_max(n = 10, order_by = n)
+
+# Plotting
+ggplot(top_sent_period1, aes(x = reorder(word, n), y = n, fill = sentiment)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Most Frequently Used Words by Sentiment (1950-1980)",
+       x = "Word",
+       y = "Frequency",
+       fill = "Sentiment") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  coord_flip()
+
+ggplot(top_sent_period2, aes(x = reorder(word, n), y = n, fill = sentiment)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Most Frequently Used Words by Sentiment (1981-2019)",
+       x = "Word",
+       y = "Frequency",
+       fill = "Sentiment") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  coord_flip()
+```
+
+Wordclouds also can show comparisons in frequency of sentiment words in the two periods.
+
+**Period 1:**
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+#| warning: false
+
+library(wordcloud)
+library(reshape2)
+
+period1 |> 
+  count(word, sentiment, sort = TRUE) |> 
+  acast(word ~ sentiment, value.var = "n", fill = 0) |> 
+  comparison.cloud(colors = c("green", "deeppink"),
+                   max.words = 100, scale = c(3.5,0.50))
+```
+
+**Period 2:**
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+#| warning: false
+
+period2 |> 
+  count(word, sentiment, sort = TRUE) |> 
+  acast(word ~ sentiment, value.var = "n", fill = 0) |> 
+  comparison.cloud(colors = c("turquoise", "purple"),
+                   max.words = 100, scale=c(3.5,0.50))
+```
+
+Overall, it seems that in the later half of the timeframe (1950-2019) 'love' remained the most popular word included in lyrics, but there was a slight increase in more negative words and swear words.
+
+## Rankings and sentiments
+From the first graph I made I observed a slight increase in the use of negative sentiment words over time (although there was also an increase of positive sentiment words). I would like to see if there is a content bias in chart rankings, and if so, whether positive or negative lyrics fair better.
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+#| warning: false
+
+# Calculate score by returning true for positive and false for negative
+# then *2 and -1 to convert true to 1 and false to -1
+sentiment_scores <- songs_tidy |> 
+  mutate(sentiment_score = (sentiment == "positive") * 2 - 1) |> 
+  group_by(year, rank) |> 
+  summarize(sentiment_score = sum(sentiment_score)) |> 
+  ungroup()
+
+# Custom colors so that rank 1 and rank 10 are distinct since
+# the default color gradient makes them too similar
+custom_colors <- c("darkblue", "blue", "green", "yellow", "orange", "pink", "magenta", "red", "darkred", "purple")
+
+# Plot
+ggplot(sentiment_scores, aes(x = year, y = sentiment_score, color = as.factor(rank))) +
+  geom_line() +
+  scale_color_manual(values = custom_colors) +  
+  labs(title = "Sentiment Score by Ranking",
+       x = "Year",
+       y = "Sentiment Score",
+       color = "Ranking") +
+  theme_minimal()
+```
+
+Separating the sentiment scores over time by ranking does not seem to show that higher rankings correspond with more negativity/positivity.
+
+## Conclusion
+Contrary to my initial hypothesis, there is not a very prominent content bias or correlation between chart ranking and use of negative lyrics, i.e. the top ranked songs don't necessarily have more negative words than others. However, there does seem to be an increase overall in the use of negative lyrics. There was also an increase of positive lyrics, so this could be because of a growing trend of using emotional lyrics in general, not necessarily predominantly positive or negative. I think it is also worth noting that the Kaggle dataset only contained the top 10 songs from 1950-2019, so it is possible that using a dataset with a wider time period and rank range (e.g. a dataset of top 50 songs vs songs that didn't make it to the charts at all) could show different results. 
